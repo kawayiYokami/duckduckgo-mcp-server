@@ -10,6 +10,15 @@ import asyncio
 from datetime import datetime, timedelta
 import time
 import re
+import os
+from enum import Enum
+
+
+class SafeSearchMode(Enum):
+    """DuckDuckGo SafeSearch modes"""
+    STRICT = "1"      # kp=1: Strict filtering (most restrictive)
+    MODERATE = "-1"   # kp=-1: Moderate filtering (default)
+    OFF = "-2"        # kp=-2: No filtering
 
 
 @dataclass
@@ -47,8 +56,17 @@ class DuckDuckGoSearcher:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
-    def __init__(self):
+    def __init__(self, safe_search: SafeSearchMode = SafeSearchMode.MODERATE, default_region: str = ""):
+        """
+        Initialize DuckDuckGo searcher
+
+        Args:
+            safe_search: SafeSearch filtering mode (STRICT/MODERATE/OFF) - fixed at startup
+            default_region: Default region code (e.g., 'us-en', 'cn-zh', 'wt-wt' for no region)
+        """
         self.rate_limiter = RateLimiter()
+        self.safe_search = safe_search
+        self.default_region = default_region
 
     def format_results_for_llm(self, results: List[SearchResult]) -> str:
         """Format results in a natural language style that's easier for LLMs to process"""
@@ -67,20 +85,33 @@ class DuckDuckGoSearcher:
         return "\n".join(output)
 
     async def search(
-        self, query: str, ctx: Context, max_results: int = 10
+        self, query: str, ctx: Context, max_results: int = 10, region: str = ""
     ) -> List[SearchResult]:
+        """
+        Search DuckDuckGo
+
+        Args:
+            query: Search query
+            ctx: MCP context
+            max_results: Maximum results to return
+            region: Region code (empty = use default, or specify like 'us-en', 'cn-zh', 'jp-ja')
+        """
         try:
             # Apply rate limiting
             await self.rate_limiter.acquire()
+
+            # Use provided region or fall back to default
+            effective_region = region if region else self.default_region
 
             # Create form data for POST request
             data = {
                 "q": query,
                 "b": "",
-                "kl": "",
+                "kl": effective_region,  # Region/language code
+                "kp": self.safe_search.value,  # SafeSearch mode (fixed)
             }
 
-            await ctx.info(f"Searching DuckDuckGo for: {query}")
+            await ctx.info(f"Searching DuckDuckGo for: {query} (SafeSearch: {self.safe_search.name}, Region: {effective_region or 'default'})")
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -207,22 +238,39 @@ class WebContentFetcher:
 
 # Initialize FastMCP server
 mcp = FastMCP("ddg-search")
-searcher = DuckDuckGoSearcher()
+
+# Read configuration from environment variables
+SAFE_SEARCH_MODE = os.getenv("DDG_SAFE_SEARCH", "MODERATE").upper()
+REGION_CODE = os.getenv("DDG_REGION", "")
+
+# Validate and set SafeSearch mode
+try:
+    safe_search = SafeSearchMode[SAFE_SEARCH_MODE]
+except KeyError:
+    print(f"Warning: Invalid DDG_SAFE_SEARCH value '{SAFE_SEARCH_MODE}', using MODERATE", file=sys.stderr)
+    safe_search = SafeSearchMode.MODERATE
+
+searcher = DuckDuckGoSearcher(safe_search=safe_search, default_region=REGION_CODE)
 fetcher = WebContentFetcher()
+
+print(f"DuckDuckGo MCP Server initialized:", file=sys.stderr)
+print(f"  SafeSearch: {safe_search.name} (kp={safe_search.value})", file=sys.stderr)
+print(f"  Default Region: {REGION_CODE or 'none'}", file=sys.stderr)
 
 
 @mcp.tool()
-async def search(query: str, ctx: Context, max_results: int = 10) -> str:
+async def search(query: str, ctx: Context, max_results: int = 10, region: str = "") -> str:
     """
     Search DuckDuckGo and return formatted results.
 
     Args:
         query: The search query string
         max_results: Maximum number of results to return (default: 10)
+        region: Region/language code (optional, leave empty to use default). Examples: 'us-en' (USA), 'cn-zh' (China), 'jp-ja' (Japan), 'wt-wt' (no region)
         ctx: MCP context for logging
     """
     try:
-        results = await searcher.search(query, ctx, max_results)
+        results = await searcher.search(query, ctx, max_results, region)
         return searcher.format_results_for_llm(results)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)

@@ -45,6 +45,7 @@ uv pip install duckduckgo-mcp-server
 
 Add the following configuration:
 
+**Basic Configuration (No SafeSearch, No Default Region):**
 ```json
 {
     "mcpServers": {
@@ -55,6 +56,34 @@ Add the following configuration:
     }
 }
 ```
+
+**With SafeSearch and Region Configuration:**
+```json
+{
+    "mcpServers": {
+        "ddg-search": {
+            "command": "uvx",
+            "args": ["duckduckgo-mcp-server"],
+            "env": {
+                "DDG_SAFE_SEARCH": "STRICT",
+                "DDG_REGION": "cn-zh"
+            }
+        }
+    }
+}
+```
+
+**Configuration Options:**
+- `DDG_SAFE_SEARCH`: SafeSearch filtering level (optional)
+  - `STRICT`: Maximum content filtering (kp=1)
+  - `MODERATE`: Balanced filtering (kp=-1, default if not specified)
+  - `OFF`: No content filtering (kp=-2)
+- `DDG_REGION`: Default region/language code (optional, examples below)
+  - `us-en`: United States (English)
+  - `cn-zh`: China (Chinese)
+  - `jp-ja`: Japan (Japanese)
+  - `wt-wt`: No specific region
+  - Leave empty for DuckDuckGo's default behavior
 
 3. Restart Claude Desktop
 
@@ -74,7 +103,7 @@ mcp install server.py
 ### 1. Search Tool
 
 ```python
-async def search(query: str, max_results: int = 10) -> str
+async def search(query: str, max_results: int = 10, region: str = "") -> str
 ```
 
 Performs a web search on DuckDuckGo and returns formatted results.
@@ -82,9 +111,22 @@ Performs a web search on DuckDuckGo and returns formatted results.
 **Parameters:**
 - `query`: Search query string
 - `max_results`: Maximum number of results to return (default: 10)
+- `region`: (Optional) Region/language code to override the default. Leave empty to use the configured default region.
+
+**Region Code Examples:**
+- `us-en`: United States (English)
+- `cn-zh`: China (Chinese)
+- `jp-ja`: Japan (Japanese)
+- `de-de`: Germany (German)
+- `fr-fr`: France (French)
+- `wt-wt`: No specific region
 
 **Returns:**
 Formatted string containing search results with titles, URLs, and snippets.
+
+**Example Usage:**
+- Search with default settings: `search("python tutorial")`
+- Search with specific region: `search("latest news", region="jp-ja")` for Japanese news
 
 ### 2. Content Fetching Tool
 
@@ -114,6 +156,18 @@ Cleaned and formatted text content from the webpage.
 - Cleans up DuckDuckGo redirect URLs
 - Formats results for optimal LLM consumption
 - Truncates long content appropriately
+
+### Content Safety
+
+- **SafeSearch Filtering**: Configured at server startup via `DDG_SAFE_SEARCH` environment variable
+  - Controlled by administrators, not modifiable by AI assistants
+  - Filters inappropriate content based on the selected level
+  - Uses DuckDuckGo's official `kp` parameter
+
+- **Region Localization**:
+  - Default region set via `DDG_REGION` environment variable
+  - Can be overridden per search request by AI assistants
+  - Improves result relevance for specific geographic regions
 
 ### Error Handling
 
