@@ -1,0 +1,47 @@
+{
+  "name": "ddg-mcp-search",
+  "version": "1.0.0",
+  "description": "Lightweight DuckDuckGo MCP Server with SafeSearch and Region support",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ddg-mcp": "dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "duckduckgo",
+    "search",
+    "ai",
+    "claude",
+    "safe-search"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kawayiYokami/duckduckgo-mcp-server.git"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p ../tsconfig.json",
+    "dev": "tsx watch core/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "kawayiYokami",
+  "license": "MIT"
+}
