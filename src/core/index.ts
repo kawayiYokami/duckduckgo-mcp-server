@@ -10,6 +10,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { DuckDuckGoSearcher } from './searcher.js';
+import { WebContentFetcher } from './fetcher.js';
 import { SafeSearchMode, ServerConfig } from './types.js';
 
 /**
@@ -45,6 +46,7 @@ function loadConfig(): ServerConfig {
 async function main() {
   const config = loadConfig();
   const searcher = new DuckDuckGoSearcher(config.safeSearch, config.defaultRegion);
+  const fetcher = new WebContentFetcher();
 
   // 创建MCP服务器
   const server = new Server(
@@ -86,45 +88,100 @@ async function main() {
           required: ['query']
         }
       },
+      {
+        name: 'fetch_content',
+        description: '从URL获取并解析网页内容',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: '要获取内容的网页URL'
+            },
+            max_length: {
+              type: 'number',
+              description: '返回内容的最大字符数（默认: 8000）',
+              default: 8000
+            }
+          },
+          required: ['url']
+        }
+      },
     ]
   }));
 
   // 注册工具调用处理
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name !== 'search') {
-      throw new Error(`未知工具: ${request.params.name}`);
+    const toolName = request.params.name;
+
+    // 搜索工具
+    if (toolName === 'search') {
+      const { query, max_results = 10, region = '' } = request.params.arguments as {
+        query: string;
+        max_results?: number;
+        region?: string;
+      };
+
+      try {
+        const results = await searcher.search({ query, maxResults: max_results, region });
+        const formattedText = searcher.formatResults(results);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: formattedText
+            }
+          ]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `搜索时发生错误: ${errorMessage}`
+            }
+          ],
+          isError: true
+        };
+      }
     }
 
-    const { query, max_results = 10, region = '' } = request.params.arguments as {
-      query: string;
-      max_results?: number;
-      region?: string;
-    };
-
-    try {
-      const results = await searcher.search({ query, maxResults: max_results, region });
-      const formattedText = searcher.formatResults(results);
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: formattedText
-          }
-        ]
+    // 网页内容抓取工具
+    if (toolName === 'fetch_content') {
+      const { url, max_length = 8000 } = request.params.arguments as {
+        url: string;
+        max_length?: number;
       };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `搜索时发生错误: ${errorMessage}`
-          }
-        ],
-        isError: true
-      };
+
+      try {
+        const content = await fetcher.fetch({ url, maxLength: max_length });
+        const formattedText = fetcher.formatResult(url, content);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: formattedText
+            }
+          ]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `获取网页内容时发生错误: ${errorMessage}`
+            }
+          ],
+          isError: true
+        };
+      }
     }
+
+    throw new Error(`未知工具: ${toolName}`);
   });
 
   // 连接stdio传输
