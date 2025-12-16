@@ -16,17 +16,19 @@ import { SafeSearchMode, ServerConfig } from './types.js';
  * 从环境变量加载配置
  */
 function loadConfig(): ServerConfig {
-  const safeSearchStr = process.env.DDG_SAFE_SEARCH?.toUpperCase() || 'MODERATE';
+  // 支持两种环境变量命名方式：SAFE_SEARCH 或 DDG_SAFE_SEARCH
+  const safeSearchStr = (process.env.SAFE_SEARCH || process.env.DDG_SAFE_SEARCH || 'MODERATE').toUpperCase();
   let safeSearch: SafeSearchMode;
 
   try {
     safeSearch = SafeSearchMode[safeSearchStr as keyof typeof SafeSearchMode];
   } catch {
-    console.error(`[警告] 无效的DDG_SAFE_SEARCH值 '${safeSearchStr}', 使用MODERATE`);
+    console.error(`[警告] 无效的SAFE_SEARCH值 '${safeSearchStr}', 使用MODERATE`);
     safeSearch = SafeSearchMode.MODERATE;
   }
 
-  const defaultRegion = process.env.DDG_REGION || '';
+  // 支持两种环境变量命名方式：REGION 或 DDG_REGION
+  const defaultRegion = process.env.REGION || process.env.DDG_REGION || '';
 
   console.error('='.repeat(60));
   console.error('DuckDuckGo MCP Server 已初始化');
